@@ -2,6 +2,7 @@
 # Receives: waveform, beat timestamps
 # Outputs: array of shape [len(timestamps), feat_dimension]
 
+import librosa
 from librosa.feature import melspectrogram, mfcc
 
 class MFCC():
@@ -18,13 +19,9 @@ class MFCC():
         end = center + self.frame_length // 2
         
         frame = waveform[start:end]
-        feats = mfcc(y=frame, sr=self.sr, n_mfcc=self.n_mfcc, n_fft=self.frame_length, center=False)
+
+        S = melspectrogram(y=frame, sr=self.sr, n_fft=self.frame_length, center=False, n_mels=128) # (n_mels, n_frames: 1)
+        feats = mfcc(S=librosa.power_to_db(S), n_mfcc=self.n_mfcc)
+        # TODO: normalize MFCCs?
 
         return feats
-
-
-
-
-
-
-     

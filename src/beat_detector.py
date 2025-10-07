@@ -1,4 +1,5 @@
 from scipy import signal
+import librosa
 from scipy.signal import windows
 import soundfile as sf
 import matplotlib.pyplot as plt
@@ -20,7 +21,7 @@ class BD():
     self.min_peak_prominence = min_peak_prominence
     self.sr = sr
     self.nyquist = sr / 2
-    self.feat_extractor = MFCC(sr = self.sr, n_mfcc = 13, frame_length = 512) #TODO: adjust frame length
+    self.feat_extractor = MFCC(sr = self.sr, n_mfcc = 13, frame_length = 512) #TODO: (?) adjust frame length
 
   def bandpass(self):
     '''
@@ -203,7 +204,14 @@ class BD():
 
     plt.tight_layout()
     plt.savefig(out_file)
+    plt.close()
 
+
+  def plot_feats(self, out_file):
+    print(np.array(self.feats).shape)
+    img = librosa.display.specshow(np.array(self.feats))
+    plt.savefig(out_file)
+  
   def write_wav(self, out_file):
     '''
     Writes the bandpass filtered audio to disk. Must be called after detect_beats().

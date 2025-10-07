@@ -51,7 +51,7 @@ The `beat_detector` module provides the `BD` class. Objects created by instantia
     ```
 
 # Output format and loading
-Outputs will be saved under the specified directory. Data is aggregated into `.parquet` files and indexed by filenames on the original input folder. Check `test/inspect_parquet` for an example on how to load the data.    
+Outputs will be saved under the specified directory. Data is aggregated into `lmdb` files and indexed by filenames on the original input folder. Check `test/inspect_lmdb` for an example on how to load the data.    
 
 # Example
 ![Image](images/example.png)
