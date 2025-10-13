@@ -1,7 +1,7 @@
 #  🥁 Vowel Beat Detector 🥁
 This repository provides tools to analyze speech rhythm based on durational and spectral approaches:
-* Vowel onset (beat) locations
-* Low-frequency (amplitude envelope) spectrum
+* Vowel onset locations ("beats")
+* Low-frequency spectrum (amplitude modulation)
 
 # Functionality
 The `beat_detector` module provides the `BD` class. Objects created by instantiating this class can be configured with respect to filter design and onset detection properties and offer the base method for rhythmic feature extraction. Additionally, it is possible to plot the byproducts of the procedure and play the filtered audios.
