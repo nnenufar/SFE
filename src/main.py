@@ -6,7 +6,7 @@ from tqdm import tqdm
 import numpy as np
 import lmdb
 import pickle
-from rhythm import RTM
+from feat_extractor import sfe
 
 parser = argparse.ArgumentParser()
 
@@ -20,18 +20,22 @@ parser.add_argument('-D', '--max_dur', type=int, default=10, help='maximum durat
 parser.add_argument('-d', '--min_dur', type=int, default=2, help='minimum duration (in seconds) of audio files to be processed')
 parser.add_argument('-mfcc', '--compute_mfcc', action='store_true', help='if used, MFCC features will be computed and stored in the database')
 parser.add_argument('-tg', '--save_textgrids', action='store_true', help='if used, textgrid will be saved in [output_dir]/textgrids')
-parser.add_argument('-w', '--save_filtered', action='store_true', help='if used, filtered audios will be saved in [output_dir]/filtered_wavs')
 parser.add_argument('-plt', '--save_plots', action='store_true', help='if used, plots will be saved in [output_dir]/plots')
 
 args = parser.parse_args()
 
-processor = RTM(sr = args.sampling_rate, env_method = args.envelope_method, bandpass_left=args.bandpass_left, bandpass_right=args.bandpass_right)
+processor = sfe(sr = args.sampling_rate, env_method = args.envelope_method, bandpass_left=args.bandpass_left, bandpass_right=args.bandpass_right)
 
 # Gather all .wav files in the input directory including subdirs
-file_list = [str(p) for p in Path(args.input_dir).rglob('*.wav')]
+file_list = [
+    str(p)
+    for p in Path(args.input_dir).rglob('*')
+    if p.suffix.lower() == '.wav'
+]
+
 gt_base_path = os.path.join(args.input_dir, 'textgrids_gt')
 os.makedirs(args.output_dir, exist_ok=True)
-out_file = os.path.join(args.output_dir, "rtm_feats.lmdb")
+out_file = os.path.join(args.output_dir, "feats.lmdb")
 map_size = 100 * 1024**3
 env = lmdb.open(out_file, map_size=map_size, writemap=True, map_async=True)
 
@@ -62,26 +66,31 @@ for i, file_path in enumerate(tqdm(file_list, desc="Processing audios")):
        continue
     else:
       durations.append(duration)
-      beats = processor.process(waveform,
+      feats = processor.process(waveform,
                                 identifier,
                                 write_dir = args.output_dir,
                                 gt_tg_dir = gt_base_path,
                                 write_tgs = args.save_textgrids,
-                                write_filtered = args.save_filtered,
                                 write_plots = args.save_plots)
       
       entry = {
           'key': identifier,                                  # str   
-          'envelope': beats['envelope'],                      
-          'beats': beats['beat_frames'],                      # list(int)
-          'envelope_spectrum': beats['envelope_spectrum'],    # np.array array_shape (num_freq_bins, )
-          'spectrum_freq_bins': beats['spectrum_freq_bins'],
-          'intervals': beats['beat_intervals'],               # list(float)
-          'dur': duration
+          'waveform': waveform,
+          'envelope': feats['envelope'],                      
+          'envelope_derivative': feats['envelope_derivative'],
+          'beats': feats['beat_frames'],                      # list(int)
+          'envelope_spectrum': feats['envelope_spectrum'],    # np.array array_shape (num_freq_bins, )
+          'spectrum_freq_bins': feats['spectrum_freq_bins'],
+          'intervals': feats['beat_intervals'],    
+          'f0': feats['f0'],
+          'voiced_mask': feats['voiced_mask'],                      # list(float)
+          'dur': duration,
+          'f0_wavelet': feats['f0_wavelet'],                      
+          'egemaps': feats['egemaps']
       }
 
       if args.compute_mfcc:
-          entry['mfcc_features'] = beats['mfcc_features']      # list(array) array_shape (num_beats, num_mfccs)
+          entry['mfcc_features'] = feats['mfcc_features']      # list(array) array_shape (num_beats, num_mfccs)
       
       serialized_entry = pickle.dumps(entry)
       txn.put(identifier.encode('utf-8'), serialized_entry)
