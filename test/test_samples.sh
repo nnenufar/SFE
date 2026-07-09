@@ -1,1 +1,0 @@
-python src/main.py -in /hadatasets/joao.lima/data/quick_samples/audios -out /hadatasets/joao.lima/data/quick_samples/out/test -sr 16000 -plt

@@ -1,65 +1,126 @@
-#  🥁 Vowel Beat Detector 🥁
-This repository provides tools to analyze speech rhythm based on durational and spectral approaches:
+# Speech Feature Extractor
+Tools to extract prosody-related speech features:
+* Fundamental frequency curve (Praat method)
+* Amplitude envelope (Bark-scale or vocalic energy)
 * Vowel onset locations ("beats")
-* Low-frequency spectrum (amplitude modulation)
+* Envelope spectrum
+* OpenSMILE (eGeMAPS) features
 
 # Functionality
-The `beat_detector` module provides the `BD` class. Objects created by instantiating this class can be configured with respect to filter design and onset detection properties and offer the base method for rhythmic feature extraction. Additionally, it is possible to plot the byproducts of the procedure and play the filtered audios.
+The `feat_extractor` module provides the `sfe` class, which wraps two envelope extraction strategies (`bark`, `vocallic_energy`) plus pitch, wavelet, eGeMAPS, and optional MFCC feature extraction.
 
-# Usage
-1. **Clone this repository and install dependencies**
-    ```
-    git clone https://github.com/nnenufar/vowel_beat_detector.git
-    cd vowel_beat_detector
-    pip install -r requirements.txt
-    ```
+# Setup
+1. **Install dependencies with conda**
+
+   ```
+   conda env create -f env.yml
+   conda activate sfe
+   ```
+
 2. **Set up input folder**
 
-    All audio files must be contained inside the same folder:
-    ```
-    input_dir/
-            audio/
-                ├──audio1.wav
-                ├──audio2.wav
-                ├──audio3.wav
-            textgrids_gt/ (optional)
-                ├──audio1.TextGrid
-    ```
+   Audio files are discovered recursively under the input directory:
 
-    Each audio filename must be unique.
-    
-    Optionally, manually segmented textgrids can be included under `textgrids_gt`. If present, the provided annotations will be plotted alongside automatically detected ones when `-plt` is used. The ground truth textgrid must contain a point tier named `beats` and the filename must match the wav's.
-    
-3. **Run main script**
+   ```
+   input_dir/
+       subdir_a/
+           audio1.wav
+           audio2.wav
+       subdir_b/
+           audio3.wav
+       textgrids_gt/ (optional)
+           audio1.TextGrid
+           audio2.TextGrid
+   ```
 
-    Arguments:
-    * `-in`: path to audio files input folder
-    * `-out`: path to output files
-    * `-r`: bandpass filter's right cutoff frequency
-    * `-l`: bandpass filter's left cutoff frequency
-    * `-sr`: audio sampling rate. Automatic resampling is performed if specified value is different from the audio's native sr
-    
-    Optional:
-    * `-tg`: if used, textgrid will be saved in [output_dir]/textgrids
-    * `-w`: if used, filtered audios will be saved in [output_dir]/filtered_wavs
-    * `-plt`: if used, plots will be saved in [output_dir]/plots
+   Each audio filename must be unique across all subdirectories. Output keys are formed from the last two path components (`dirname_filename.wav`).
 
-    Example:
-    
-    ```
-    python3 main.py -in <IN_PATH> -out <OUT_PATH> -l 800 -r 1500 -sr 16000 -plt
-    ```
+   Optionally, manually annotated textgrids can be placed under `textgrids_gt`. When `-plt` is used, ground-truth beats are plotted alongside detections. The ground-truth textgrid must contain a point tier named `beats` and its filename must match the wav's.
 
-# Output format and loading
-Outputs will be saved under the specified directory. Data is aggregated into `lmdb` files and indexed by filenames on the original input folder. Check `test/inspect_lmdb` for an example on how to load the data.    
+3. **Run the main script**
 
-# Example
-![Image](images/example.png)
+   ```
+   python src/main.py -in <IN_DIR> -out <OUT_DIR> -env <bark|vocallic_energy> -sr <RATE>
+   ```
+
+   **Required arguments:**
+
+   | Flag | Description |
+   |------|-------------|
+   | `-in`   | Directory with input `.wav` files (searched recursively) |
+   | `-out`  | Output directory |
+   | `-env`  | Envelope extraction method: `bark` or `vocallic_energy` |
+   | `-sr`   | Target sampling rate. Files are resampled if their native rate differs. |
+
+   **Optional arguments:**
+
+   | Flag | Default | Description |
+   |------|---------|-------------|
+   | `-l`     | 700     | Bandpass filter left cutoff (Hz) — only used with `vocallic_energy` |
+   | `-r`     | 1300    | Bandpass filter right cutoff (Hz) — only used with `vocallic_energy` |
+   | `-D`     | 10      | Maximum audio duration (seconds). Longer files are skipped. |
+   | `-d`     | 2       | Minimum audio duration (seconds). Shorter files are skipped. |
+   | `-plt`   | —       | Save diagnostic plots in `[output_dir]/plots` |
+   | `-tg`    | —       | Save beat TextGrids in `[output_dir]/textgrids` |
+   | `-mfcc`  | —       | Compute 13-dim MFCCs around each detected beat frame |
+
+   **Examples:**
+
+   ```
+   # Bark envelope, with plots
+   python src/main.py -in data/audio -out data/out -env bark -sr 16000 -plt
+
+   # Vocalic energy envelope, custom bandpass
+   python src/main.py -in data/audio -out data/out -env vocallic_energy -l 800 -r 1500 -sr 16000
+   ```
+
+# Output Visualization
+
+![example_image](images/example.png)
+
+# Output format
+
+Output is written to an LMDB file at `[output_dir]/feats.lmdb`. Keys are formed from the last two path components joined with `_` (e.g. `subdir_audio1.wav`). Values are pickled dictionaries.
+
+## Loading data
+
+```python
+import lmdb
+import pickle
+
+env = lmdb.open("path/to/feats.lmdb", readonly=True)
+with env.begin() as txn:
+    entry = pickle.loads(txn.get(b"subdir_audio1.wav"))
+```
+
+## Entry fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `key`                  | str           | File identifier |
+| `waveform`             | np.ndarray    | Resampled audio |
+| `envelope`             | np.ndarray    | Amplitude envelope (1 kHz) |
+| `envelope_derivative`  | np.ndarray    | Derivative of envelope (max-abs scaled) |
+| `beats`                | list[int]     | Detected beat onset frame indices |
+| `envelope_spectrum`    | np.ndarray    | FFT magnitude spectrum of envelope (up to 10 Hz) |
+| `spectrum_freq_bins`   | np.ndarray    | Frequency bins for envelope_spectrum |
+| `intervals`            | list[float]   | Inter-beat intervals (seconds) |
+| `f0`                   | np.ndarray    | Log-F0 contour (resampled to 1 kHz) |
+| `voiced_mask`          | np.ndarray    | Voiced/unvoiced mask (float) |
+| `dur`                  | float         | Audio duration (seconds) |
+| `egemaps`              | np.ndarray    | eGeMAPS LLD features (N_frames x N_feats) |
+| `f0_wavelet`           | np.ndarray    | CWT of F0 contour (scales 1–31) |
+| `mfcc_features`        | list[np.ndarray] | Per-beat 13-dim MFCCs (only if `-mfcc` was used) |
+
+A `metadata.txt` summary (files processed, aggregate duration stats) is also written alongside the LMDB.
+
+# Resumability
+
+The pipeline checks the target LMDB before processing each file. If a key already exists, the file is skipped. To force a full re-run, delete or rename `feats.lmdb`.
 
 # References
-* [A similar implementation using Praat](https://github.com/pabarbosa/prosody-scripts/tree/master/BeatExtractor)  
-
-* Reference article:
+* [BeatExtractor — a similar implementation using Praat](https://github.com/pabarbosa/prosody-scripts/tree/master/BeatExtractor)
+* Reference articles:
 
 ```
 @article{CUMMINS1998145,
@@ -100,4 +161,3 @@ author = {Fred Cummins and Robert Port}
   langid = {english}
 }
 ```
-
