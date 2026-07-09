@@ -43,6 +43,8 @@ The `feat_extractor` module provides the `sfe` class, which wraps two envelope e
    python src/main.py -in <IN_DIR> -out <OUT_DIR> -env <bark|vocallic_energy> -sr <RATE>
    ```
 
+   We also provide an example [SLURM script](submit_job.sh) to run the extraction as a batch job.
+
    **Required arguments:**
 
    | Flag | Description |
